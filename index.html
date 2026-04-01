@@ -1,0 +1,1482 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Семейное древо</title>
+<link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:wght@400;500;600&family=DM+Sans:wght@300;400;500&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --bg: #000000;
+    --surface: #ffffff;
+    --surface2: #f2f2f0;
+    --border: rgba(0,0,0,0.10);
+    --border-hover: rgba(0,0,0,0.22);
+    --accent: #b89a5a;
+    --accent-dim: rgba(184,154,90,0.10);
+    --text: #1a1a1a;
+    --text-muted: #777;
+    --text-dim: #aaa;
+    --male-border: rgba(60,120,180,0.45);
+    --male-text: #2a6faa;
+    --female-border: rgba(190,70,130,0.45);
+    --female-text: #b04888;
+    --line: rgba(200,169,110,0.45);
+    --line-spouse: rgba(200,169,110,0.6);
+    --line-sibling: rgba(140,200,140,0.7);
+    --topbar-bg: #0a0a0a;
+  }
+  *{box-sizing:border-box;margin:0;padding:0}
+  body{font-family:'DM Sans',sans-serif;background:var(--bg);color:var(--text);height:100vh;overflow:hidden;display:flex;flex-direction:column}
+
+  /* ── Topbar ── */
+  #topbar{height:48px;background:var(--topbar-bg);border-bottom:1px solid rgba(255,255,255,0.06);display:flex;align-items:center;padding:0 16px;gap:8px;flex-shrink:0;z-index:100}
+  #topbar h1{font-family:'Cormorant Garamond',serif;font-size:18px;font-weight:500;color:var(--accent);letter-spacing:.04em;white-space:nowrap}
+  #search-input{
+    width:180px;font-family:'DM Sans',sans-serif;font-size:12px;padding:5px 12px;border-radius:6px;
+    border:1px solid rgba(255,255,255,0.1);background:rgba(255,255,255,0.04);color:rgba(255,255,255,0.8);outline:none;transition:border-color .15s;
+  }
+  #search-input::placeholder{color:rgba(255,255,255,0.25)}
+  #search-input:focus{border-color:var(--accent)}
+  .tb-spacer{flex:1}
+  .tb-btn{font-family:'DM Sans',sans-serif;font-size:11px;padding:5px 12px;border-radius:6px;border:1px solid rgba(255,255,255,0.12);background:transparent;color:rgba(255,255,255,0.5);cursor:pointer;transition:all .15s;white-space:nowrap}
+  .tb-btn:hover{border-color:rgba(255,255,255,0.25);color:rgba(255,255,255,0.85)}
+  .tb-btn.active{border-color:var(--accent);color:var(--accent);background:rgba(184,154,90,0.12)}
+  .tb-btn.accent{border-color:var(--accent);color:var(--accent);background:rgba(184,154,90,0.12)}
+  .tb-btn.accent:hover{background:rgba(184,154,90,0.22)}
+  .tb-sep{width:1px;height:24px;background:rgba(255,255,255,0.08)}
+  #zoom-display{font-size:11px;color:rgba(255,255,255,0.35);min-width:36px;text-align:center}
+
+  /* ── Canvas ── */
+  #canvas-wrap{flex:1;position:relative;overflow:hidden;cursor:default}
+  #canvas-wrap.panning{cursor:grabbing}
+  #canvas{position:absolute;top:0;left:0;width:12000px;height:8000px;transform-origin:0 0}
+  svg#lines{position:absolute;top:0;left:0;width:12000px;height:8000px;overflow:visible}
+
+  /* ── Timeline view ── */
+  #timeline-wrap{flex:1;overflow:hidden;display:none;background:var(--bg);position:relative;cursor:default}
+  #timeline-wrap.visible{display:block}
+  #timeline-wrap.tl-panning{cursor:grabbing}
+  #timeline-canvas{transform-origin:0 0;padding:0 0 40px}
+  #canvas-wrap.hidden{display:none}
+  .tl-header{height:44px;background:rgba(10,10,10,.85);border-bottom:1px solid rgba(255,255,255,0.08);display:flex;align-items:flex-end;position:relative;backdrop-filter:blur(6px);-webkit-backdrop-filter:blur(6px)}
+  .tl-year{position:absolute;bottom:8px;font-family:'Cormorant Garamond',serif;font-size:13px;font-weight:500;color:rgba(255,255,255,0.35);transform:translateX(-50%)}
+  .tl-body{position:relative;padding:20px 0}
+  .tl-gen-sep{position:relative;padding:0 0 6px}
+  .tl-gen-title{font-family:'Cormorant Garamond',serif;font-size:14px;font-weight:500;color:var(--accent);opacity:.6;padding:14px 0 6px 14px;letter-spacing:.04em;border-top:1px solid rgba(255,255,255,0.04)}
+  .tl-gen-sep:first-child .tl-gen-title{border-top:none;padding-top:4px}
+  .tl-row{display:flex;align-items:center;height:34px;position:relative}
+  .tl-bar{position:absolute;height:26px;border-radius:8px;display:flex;align-items:center;padding:0 10px;font-size:11px;color:#fff;font-weight:500;cursor:pointer;transition:filter .15s,box-shadow .15s;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;min-width:40px;box-shadow:0 1px 4px rgba(0,0,0,.3)}
+  .tl-bar:hover{filter:brightness(1.15);box-shadow:0 2px 12px rgba(0,0,0,.45)}
+  .tl-bar-age{font-size:9px;opacity:.65;margin-left:6px;font-weight:400}
+  .tl-grid-line{position:absolute;top:0;bottom:0;width:1px;background:rgba(255,255,255,0.035)}
+
+  /* ── Nodes ── */
+  .node{position:absolute;width:164px;cursor:pointer;user-select:none;transition:opacity .35s,filter .35s}
+  .node.dimmed{opacity:.1;filter:blur(1.5px)}
+  .node.focused .card{box-shadow:0 0 0 2px var(--accent),0 0 32px rgba(184,154,90,.35) !important}
+  .node.multi-selected .card{outline:2px dashed var(--accent);outline-offset:2px}
+  .card{background:var(--surface);border:1px solid rgba(0,0,0,.06);border-radius:14px;padding:14px 12px 11px;transition:border-color .2s,box-shadow .2s;box-shadow:0 2px 12px rgba(0,0,0,.2);cursor:pointer}
+  .card:hover{border-color:rgba(0,0,0,.14);box-shadow:0 6px 28px rgba(0,0,0,.35)}
+  .card.selected{border-color:var(--accent);box-shadow:0 0 0 2px var(--accent),0 4px 24px rgba(184,154,90,.25)}
+  .card.male.selected{border-color:var(--male-text);box-shadow:0 0 0 2px var(--male-text),0 4px 20px rgba(42,111,170,.2)}
+  .card.female.selected{border-color:var(--female-text);box-shadow:0 0 0 2px var(--female-text),0 4px 20px rgba(176,72,136,.2)}
+  .card-name{font-family:'Cormorant Garamond',serif;font-size:15px;font-weight:600;color:#111;text-align:center;line-height:1.3;word-break:break-word;min-height:18px}
+  .card-dates{font-size:10px;color:#999;text-align:center;margin-top:5px;font-weight:300;letter-spacing:.03em}
+  .card-age{font-size:9px;color:rgba(255,255,255,.4);text-align:center;margin-top:2px;font-weight:400}
+  .card-profession{font-size:9px;color:var(--accent);text-align:center;margin-top:4px;font-weight:500;text-transform:uppercase;letter-spacing:.1em}
+  .card-photos-badge{position:absolute;top:-7px;right:-7px;min-width:20px;height:20px;padding:0 5px;border-radius:10px;background:var(--accent);color:#fff;font-size:10px;font-weight:600;display:flex;align-items:center;justify-content:center}
+  .unk-badge{font-size:12px;color:#bbb;font-style:italic}
+
+  /* ── Generation labels ── */
+  .gen-label{position:absolute;font-family:'Cormorant Garamond',serif;font-size:28px;font-weight:500;color:rgba(255,255,255,.08);user-select:none;cursor:pointer;pointer-events:auto;transition:color .2s,text-shadow .2s;padding:4px 12px;border-radius:8px}
+  .gen-label:hover{color:rgba(255,255,255,.2)}
+  .gen-label.gen-active{color:var(--accent);text-shadow:0 0 20px rgba(184,154,90,.3)}
+
+  /* ── Modal ── */
+  #modal-overlay{position:fixed;inset:0;z-index:200;display:none;align-items:center;justify-content:center;background:rgba(0,0,0,.5);backdrop-filter:blur(14px);-webkit-backdrop-filter:blur(14px);opacity:0;transition:opacity .2s}
+  #modal-overlay.open{display:flex;opacity:1}
+  #modal-box{width:min(640px,92vw);max-height:86vh;background:var(--surface);border:1px solid var(--border);border-radius:18px;overflow:hidden;display:flex;flex-direction:column;transform:scale(.94);opacity:0;transition:transform .22s cubic-bezier(.34,1.4,.64,1),opacity .18s}
+  #modal-overlay.open #modal-box{transform:scale(1);opacity:1}
+  .modal-header{display:flex;align-items:center;justify-content:space-between;padding:20px 24px 0}
+  .modal-header h3{font-family:'Cormorant Garamond',serif;font-size:22px;font-weight:500;color:var(--accent);line-height:1.2}
+  .modal-close{width:32px;height:32px;border-radius:50%;border:none;background:var(--surface2);color:var(--text-dim);font-size:18px;cursor:pointer;transition:all .15s;display:flex;align-items:center;justify-content:center}
+  .modal-close:hover{color:var(--text);background:rgba(180,60,60,.2)}
+  .modal-tabs{display:flex;gap:0;padding:14px 24px 0;border-bottom:1px solid var(--border)}
+  .modal-tab{font-family:'DM Sans',sans-serif;padding:8px 14px;font-size:12px;font-weight:500;color:var(--text-dim);border:none;background:none;cursor:pointer;border-bottom:2px solid transparent;transition:all .15s}
+  .modal-tab:hover{color:var(--text-muted)}
+  .modal-tab.active{color:var(--accent);border-bottom-color:var(--accent)}
+  .modal-body{padding:18px 24px 22px;overflow-y:auto;flex:1}
+  .tab-pane{display:none}
+  .tab-pane.active{display:block}
+
+  .field-label{font-size:10px;font-weight:500;letter-spacing:.08em;text-transform:uppercase;color:var(--text-dim);margin-bottom:5px;margin-top:14px}
+  #modal-box input,#modal-box select,#modal-box textarea{width:100%;font-family:'DM Sans',sans-serif;font-size:13px;padding:7px 10px;border-radius:8px;border:1px solid rgba(0,0,0,.10);background:var(--surface2);color:var(--text);outline:none;transition:border-color .15s;resize:vertical}
+  #modal-box input:focus,#modal-box select:focus,#modal-box textarea:focus{border-color:var(--accent)}
+  #modal-box select option{background:#fff}
+  .field-row{display:grid;grid-template-columns:1fr 1fr;gap:12px}
+  .field-row-3{display:grid;grid-template-columns:1fr 1fr 1fr;gap:12px}
+  .panel-sep{height:1px;background:var(--border);margin:16px 0}
+  .panel-section-title{font-size:10px;font-weight:500;letter-spacing:.08em;text-transform:uppercase;color:var(--text-dim);margin-bottom:10px}
+  .rel-btn{display:flex;align-items:center;gap:8px;width:100%;font-family:'DM Sans',sans-serif;font-size:12px;padding:8px 12px;border-radius:8px;border:1px solid var(--border);background:transparent;color:var(--text-muted);cursor:pointer;transition:all .15s;margin-bottom:7px;text-align:left}
+  .rel-btn:hover{border-color:var(--accent);color:var(--accent);background:rgba(184,154,90,.08)}
+  .rel-btn .icon{font-size:14px;width:18px;text-align:center}
+  .del-btn{width:100%;font-family:'DM Sans',sans-serif;font-size:12px;padding:8px 12px;border-radius:8px;border:1px solid rgba(180,60,60,.3);background:transparent;color:#b44;cursor:pointer;transition:all .15s;margin-top:4px}
+  .del-btn:hover{background:rgba(180,60,60,.12);border-color:#b44}
+  .unk-btn{font-family:'DM Sans',sans-serif;font-size:10px;padding:2px 8px;border-radius:4px;border:1px solid var(--border);background:transparent;color:var(--text-dim);cursor:pointer}
+  .unk-btn:hover{color:var(--text)}
+
+  /* ── Events timeline ── */
+  .events-header{display:flex;align-items:center;justify-content:space-between;margin-bottom:14px}
+  .events-header h4{font-family:'Cormorant Garamond',serif;font-size:15px;font-weight:500;color:var(--text-muted)}
+  .evt-list{position:relative;padding-left:20px}
+  .evt-list::before{content:'';position:absolute;left:5px;top:0;bottom:0;width:2px;background:var(--border)}
+  .evt-item{position:relative;margin-bottom:16px;padding-bottom:16px;border-bottom:1px solid var(--surface2)}
+  .evt-item::before{content:'';position:absolute;left:-19px;top:4px;width:10px;height:10px;border-radius:50%;background:var(--accent);border:2px solid var(--surface)}
+  .evt-date{font-size:11px;color:var(--accent);font-weight:500;margin-bottom:3px}
+  .evt-title{font-size:13px;font-weight:500;color:var(--text);margin-bottom:2px}
+  .evt-desc{font-size:12px;color:var(--text-muted);line-height:1.4}
+  .evt-del{position:absolute;top:0;right:0;background:none;border:none;color:var(--text-dim);font-size:14px;cursor:pointer;opacity:0;transition:opacity .15s}
+  .evt-item:hover .evt-del{opacity:1}
+  .evt-del:hover{color:#b44}
+  .evt-form{background:var(--surface2);border-radius:10px;padding:12px;margin-top:10px}
+  .evt-form .field-row{margin-bottom:8px}
+  .empty-events{text-align:center;padding:30px 16px;color:var(--text-dim);font-size:13px}
+
+  /* ── Photo gallery ── */
+  .gallery-header{display:flex;align-items:center;justify-content:space-between;margin-bottom:14px}
+  .gallery-header h4{font-family:'Cormorant Garamond',serif;font-size:15px;font-weight:500;color:var(--text-muted)}
+  .gallery-upload-btn{font-family:'DM Sans',sans-serif;font-size:11px;padding:5px 14px;border-radius:6px;border:1px solid var(--accent);background:var(--accent-dim);color:var(--accent);cursor:pointer;transition:all .15s}
+  .gallery-upload-btn:hover{background:rgba(200,169,110,.25)}
+  .photo-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(120px,1fr));gap:8px}
+  .photo-card{position:relative;border-radius:10px;overflow:hidden;aspect-ratio:1;background:var(--bg);border:1px solid var(--border);cursor:pointer;transition:transform .15s,box-shadow .15s}
+  .photo-card:hover{transform:scale(1.03);box-shadow:0 4px 16px rgba(0,0,0,.4)}
+  .photo-card img{width:100%;height:100%;object-fit:cover}
+  .photo-card .pc-tags{position:absolute;bottom:0;left:0;right:0;padding:20px 7px 6px;background:linear-gradient(transparent,rgba(0,0,0,.75));font-size:9px;color:var(--text-muted);line-height:1.3}
+  .photo-card .pc-del{position:absolute;top:4px;right:4px;width:20px;height:20px;border-radius:50%;border:none;background:rgba(0,0,0,.55);color:#b44;font-size:12px;cursor:pointer;display:none;align-items:center;justify-content:center}
+  .photo-card:hover .pc-del{display:flex}
+  .empty-gallery{text-align:center;padding:30px 16px;color:var(--text-dim);font-size:13px}
+
+  /* ── Overlays ── */
+  .overlay{display:none;position:fixed;inset:0;z-index:300;align-items:center;justify-content:center;background:rgba(0,0,0,.6);backdrop-filter:blur(6px)}
+  .overlay.open{display:flex}
+  .overlay-box{background:var(--surface);border:1px solid var(--border);border-radius:16px;padding:24px 22px;max-height:80vh;overflow-y:auto}
+  .overlay-box h4{font-family:'Cormorant Garamond',serif;font-size:17px;font-weight:500;color:var(--accent);margin-bottom:14px}
+  .pick-item{padding:9px 12px;border-radius:8px;border:1px solid var(--border);margin-bottom:7px;cursor:pointer;font-size:13px;color:var(--text-muted);transition:all .15s}
+  .pick-item:hover{border-color:var(--accent);color:var(--accent);background:rgba(184,154,90,.08)}
+  .pick-cancel{width:100%;margin-top:10px;font-family:'DM Sans',sans-serif;font-size:12px;padding:8px;border-radius:8px;border:1px solid var(--border);background:transparent;color:var(--text-dim);cursor:pointer}
+  .pick-cancel:hover{color:var(--text)}
+  .photo-drop-zone{border:2px dashed var(--border);border-radius:12px;padding:28px 16px;text-align:center;color:var(--text-dim);font-size:13px;cursor:pointer;transition:all .2s;margin-bottom:14px}
+  .photo-drop-zone:hover,.photo-drop-zone.drag-over{border-color:var(--accent);color:var(--accent);background:var(--accent-dim)}
+  .upload-previews{display:grid;grid-template-columns:repeat(auto-fill,minmax(64px,1fr));gap:6px;margin-bottom:14px}
+  .upload-previews img{width:100%;aspect-ratio:1;object-fit:cover;border-radius:8px;border:1px solid var(--border)}
+  .tag-section{margin-bottom:14px}
+  .tag-section label{font-size:10px;font-weight:500;letter-spacing:.08em;text-transform:uppercase;color:var(--text-dim);display:block;margin-bottom:8px}
+  .tag-chips{display:flex;flex-wrap:wrap;gap:5px;max-height:140px;overflow-y:auto}
+  .tag-chip{padding:4px 12px;border-radius:16px;border:1px solid var(--border);background:transparent;font-family:'DM Sans',sans-serif;font-size:11px;color:var(--text-dim);cursor:pointer;transition:all .15s}
+  .tag-chip:hover{border-color:var(--border-hover);color:var(--text-muted)}
+  .tag-chip.checked{border-color:var(--accent);color:var(--accent);background:var(--accent-dim)}
+  .upload-actions{display:flex;gap:8px;justify-content:flex-end}
+  .upload-actions button{font-family:'DM Sans',sans-serif;font-size:12px;padding:8px 18px;border-radius:8px;cursor:pointer;transition:all .15s}
+  .btn-cancel{border:1px solid var(--border);background:transparent;color:var(--text-dim)}
+  .btn-cancel:hover{color:var(--text)}
+  .btn-apply{border:1px solid var(--accent);background:var(--accent-dim);color:var(--accent);font-weight:500}
+  .btn-apply:hover{background:rgba(200,169,110,.25)}
+
+  #lightbox{position:fixed;inset:0;z-index:400;display:none;align-items:center;justify-content:center;background:rgba(0,0,0,.88);cursor:zoom-out}
+  #lightbox.open{display:flex}
+  #lightbox img{max-width:92vw;max-height:92vh;border-radius:6px;object-fit:contain}
+
+  /* ── View-only mode ── */
+  body.view-only .edit-only{display:none !important}
+  body.view-only .node{cursor:default}
+  body.view-only .card{cursor:pointer}
+  body.view-only #hint{display:none}
+  body.view-only #modal-box input,
+  body.view-only #modal-box textarea,
+  body.view-only #modal-box select{pointer-events:none;opacity:.7;user-select:text}
+  body.view-only .unk-btn,
+  body.view-only .rel-btn,
+  body.view-only .del-btn,
+  body.view-only .gallery-upload-btn,
+  body.view-only .panel-section-title,
+  body.view-only .panel-sep,
+  body.view-only #event-form-wrap,
+  body.view-only .evt-del{display:none !important}
+  .vo-details{padding:4px 0}
+  .vo-row{display:flex;justify-content:space-between;padding:7px 0;border-bottom:1px solid var(--border)}
+  .vo-row:last-child{border-bottom:none}
+  .vo-label{font-size:11px;color:var(--text-muted);text-transform:uppercase;letter-spacing:.06em;font-weight:500;min-width:100px;flex-shrink:0}
+  .vo-val{font-size:13px;color:var(--text);text-align:right;word-break:break-word}
+  .vo-bio{margin-top:10px;padding:10px 12px;background:var(--surface2);border-radius:8px;font-size:12.5px;color:var(--text);line-height:1.55;white-space:pre-wrap}
+
+  /* ── Filter Panel ── */
+  #filter-panel{display:none;position:fixed;top:54px;right:16px;background:rgba(18,18,18,.95);border:1px solid rgba(255,255,255,.1);border-radius:12px;padding:14px 16px;z-index:150;min-width:200px;max-height:70vh;overflow-y:auto;backdrop-filter:blur(10px);-webkit-backdrop-filter:blur(10px)}
+  #filter-panel.open{display:block}
+  .filter-section{margin-bottom:12px}
+  .filter-section-title{font-size:10px;font-weight:500;letter-spacing:.08em;text-transform:uppercase;color:rgba(255,255,255,.35);margin-bottom:6px}
+  .filter-row{display:flex;align-items:center;gap:8px;padding:4px 0;cursor:pointer;font-size:12px;color:rgba(255,255,255,.6);transition:color .12s}
+  .filter-row:hover{color:rgba(255,255,255,.9)}
+  .filter-cb{width:14px;height:14px;accent-color:var(--accent);cursor:pointer}
+  .filter-swatch{width:10px;height:10px;border-radius:50%;flex-shrink:0}
+  .filter-actions{display:flex;gap:8px;margin-top:8px;border-top:1px solid rgba(255,255,255,.08);padding-top:8px}
+  .filter-actions button{font-family:'DM Sans',sans-serif;font-size:11px;padding:4px 12px;border-radius:6px;border:1px solid rgba(255,255,255,.12);background:transparent;color:rgba(255,255,255,.45);cursor:pointer;transition:all .12s}
+  .filter-actions button:hover{border-color:rgba(255,255,255,.3);color:rgba(255,255,255,.8)}
+
+  /* ── Color Legend ── */
+  #color-legend{position:fixed;bottom:56px;right:16px;background:rgba(18,18,18,.92);border:1px solid rgba(255,255,255,.1);border-radius:12px;padding:12px 14px;z-index:20;min-width:120px;backdrop-filter:blur(8px);-webkit-backdrop-filter:blur(8px)}
+  .legend-title{font-family:'Cormorant Garamond',serif;font-size:13px;font-weight:500;color:rgba(255,255,255,.45);margin-bottom:8px;letter-spacing:.04em}
+  .legend-row{display:flex;align-items:center;gap:8px;margin-bottom:5px}
+  .legend-swatch-wrap{position:relative;width:16px;height:16px;cursor:pointer;flex-shrink:0}
+  .legend-swatch{width:16px;height:16px;border-radius:50%;display:block;border:2px solid rgba(255,255,255,.15);transition:border-color .15s}
+  .legend-swatch-wrap:hover .legend-swatch{border-color:rgba(255,255,255,.5)}
+  .legend-color-input{position:absolute;inset:0;opacity:0;width:100%;height:100%;cursor:pointer;padding:0;border:none}
+  .legend-name{font-size:12px;color:rgba(255,255,255,.65);font-weight:400}
+
+  /* ── Line Color Popup ── */
+  .line-color-popup{position:fixed;z-index:500;background:rgba(24,24,24,.95);border:1px solid rgba(255,255,255,.12);border-radius:12px;padding:10px;display:flex;flex-wrap:wrap;gap:6px;max-width:200px;box-shadow:0 8px 32px rgba(0,0,0,.5);backdrop-filter:blur(10px);-webkit-backdrop-filter:blur(10px)}
+  .lcp-swatch{width:24px;height:24px;border-radius:50%;cursor:pointer;border:2px solid transparent;transition:border-color .12s,transform .12s}
+  .lcp-swatch:hover{transform:scale(1.2);border-color:rgba(255,255,255,.5)}
+  .lcp-swatch.active{border-color:#fff;transform:scale(1.15)}
+  .lcp-custom-wrap{display:flex;align-items:center;gap:6px;width:100%;padding:6px 0 2px;border-top:1px solid rgba(255,255,255,.08);margin-top:2px;cursor:pointer}
+  .lcp-custom-input{width:20px;height:20px;border:none;padding:0;background:none;cursor:pointer;border-radius:4px}
+  .lcp-custom-input::-webkit-color-swatch-wrapper{padding:0}
+  .lcp-custom-input::-webkit-color-swatch{border:1px solid rgba(255,255,255,.2);border-radius:4px}
+  .lcp-custom-label{font-size:11px;color:rgba(255,255,255,.45)}
+  .lcp-reset{width:100%;text-align:center;font-family:'DM Sans',sans-serif;font-size:11px;color:rgba(255,255,255,.35);cursor:pointer;padding:5px 0 0;border-top:1px solid rgba(255,255,255,.08);margin-top:2px;transition:color .12s}
+  .lcp-reset:hover{color:rgba(255,255,255,.7)}
+
+  #hint{position:fixed;bottom:20px;left:50%;transform:translateX(-50%);font-size:12px;color:rgba(255,255,255,.35);background:rgba(20,20,20,.8);border:1px solid rgba(255,255,255,.08);border-radius:20px;padding:6px 16px;pointer-events:none;z-index:10;transition:opacity .3s}
+
+  ::-webkit-scrollbar{width:6px;height:6px}
+  ::-webkit-scrollbar-track{background:transparent}
+  ::-webkit-scrollbar-thumb{background:rgba(0,0,0,.15);border-radius:3px}
+</style>
+</head>
+<body>
+
+<div id="topbar">
+  <h1>Семейное древо</h1>
+  <input type="text" id="search-input" placeholder="Поиск..." oninput="onSearch(this.value)">
+  <div class="tb-spacer"></div>
+  <button class="tb-btn active" id="btn-tree" onclick="showView('tree')">Древо</button>
+  <button class="tb-btn" id="btn-timeline" onclick="showView('timeline')">Хронология</button>
+  <div class="tb-sep"></div>
+  <span id="zoom-display">100%</span>
+  <button class="tb-btn" id="btn-filter" onclick="toggleFilterPanel()">Фильтр</button>
+  <button class="tb-btn" onclick="fitView()">Центрировать</button>
+  <button class="tb-btn edit-only" onclick="addOrphan()">+ Добавить</button>
+  <button class="tb-btn accent edit-only" onclick="exportJSON()">Сохранить</button>
+  <button class="tb-btn edit-only" onclick="importJSON()">Загрузить</button>
+</div>
+
+<div id="canvas-wrap">
+  <div id="canvas"><svg id="lines"></svg></div>
+</div>
+
+<div id="timeline-wrap"><div id="timeline-canvas"></div></div>
+
+<!-- Modal -->
+<div id="modal-overlay">
+  <div id="modal-box">
+    <div class="modal-header">
+      <h3 id="panel-name">—</h3>
+      <button class="modal-close" onclick="closePanel()">×</button>
+    </div>
+    <div class="modal-tabs">
+      <button class="modal-tab active" data-tab="details" onclick="switchTab(this)">О человеке</button>
+      <button class="modal-tab" data-tab="photos" onclick="switchTab(this)">Общие фото <span id="photos-count"></span></button>
+    </div>
+    <div class="modal-body">
+      <div id="tab-details" class="tab-pane active">
+        <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:5px">
+          <div class="field-label" style="margin:0">Имя</div>
+          <button class="unk-btn" onclick="setUnknown('name')">Неизвестно</button>
+        </div>
+        <input id="f-name" type="text" placeholder="Имя Фамилия" oninput="uf('name',this.value)">
+
+        <div style="display:flex;align-items:center;justify-content:space-between;margin-top:14px;margin-bottom:5px">
+          <div class="field-label" style="margin:0">Даты</div>
+          <button class="unk-btn" onclick="setUnknown('dates')">Неизвестно</button>
+        </div>
+        <input id="f-dates" type="text" placeholder="01.01.1900 — 01.01.1980" oninput="uf('dates',this.value)">
+
+        <label style="display:flex;align-items:center;gap:8px;margin-top:10px;cursor:pointer;font-size:12px;color:var(--text-muted)">
+          <input type="checkbox" id="f-deceased" onchange="uf('deceased',this.checked)" style="accent-color:var(--accent);width:15px;height:15px;cursor:pointer">
+          Умер(ла)
+        </label>
+
+        <div class="field-row" style="margin-top:14px">
+          <div>
+            <div class="field-label">Место рождения</div>
+            <input id="f-birthPlace" type="text" placeholder="Город, область..." oninput="uf('birthPlace',this.value)">
+          </div>
+          <div>
+            <div class="field-label">Национальность</div>
+            <input id="f-nationality" type="text" placeholder="Русский, татарин..." oninput="uf('nationality',this.value)">
+          </div>
+        </div>
+        <div class="field-label" style="margin-top:14px">Девичья фамилия</div>
+        <input id="f-maidenName" type="text" placeholder="Фамилия до замужества..." oninput="uf('maidenName',this.value)">
+
+        <div class="field-row" style="margin-top:14px">
+          <div>
+            <div class="field-label">Пол</div>
+            <select id="f-gender" onchange="uf('gender',this.value)">
+              <option value="u">Не указан</option>
+              <option value="m">Мужской</option>
+              <option value="f">Женский</option>
+            </select>
+          </div>
+          <div>
+            <div class="field-label">Поколение</div>
+            <select id="f-generation" onchange="uf('generation',this.value===''?null:+this.value)">
+              <option value="">Авто</option>
+              <option value="0">I</option><option value="1">II</option><option value="2">III</option>
+              <option value="3">IV</option><option value="4">V</option><option value="5">VI</option>
+              <option value="6">VII</option><option value="7">VIII</option><option value="8">IX</option>
+              <option value="9">X</option>
+            </select>
+          </div>
+        </div>
+        <div class="field-row" style="margin-top:14px">
+          <div>
+            <div class="field-label">Профессия</div>
+            <input id="f-profession" type="text" placeholder="Врач, инженер..." oninput="uf('profession',this.value)">
+          </div>
+          <div></div>
+        </div>
+
+        <div class="field-label">Место захоронения</div>
+        <input id="f-burialPlace" type="text" placeholder="Кладбище, город..." oninput="uf('burialPlace',this.value)">
+
+        <div class="field-label">Заметки</div>
+        <textarea id="f-bio" rows="3" placeholder="Биография..." oninput="uf('bio',this.value)"></textarea>
+
+        <div class="panel-sep" id="personal-photos-sep"></div>
+        <div id="personal-photos-section">
+          <div class="gallery-header" style="margin-bottom:8px">
+            <h4 style="font-size:13px;color:var(--text-muted)">Фотографии</h4>
+            <button class="gallery-upload-btn edit-only" onclick="openPhotoUpload()">+ Загрузить</button>
+          </div>
+          <div id="personal-photo-gallery"></div>
+        </div>
+
+        <div class="panel-sep" id="events-sep"></div>
+        <div id="events-section">
+          <div class="events-header" style="margin-bottom:8px">
+            <h4 style="font-size:13px;color:var(--text-muted)">Жизненные события <span id="events-count" style="opacity:.5"></span></h4>
+            <button class="gallery-upload-btn edit-only" onclick="showEventForm()">+ Добавить</button>
+          </div>
+          <div id="event-list"></div>
+          <div id="event-form-wrap" style="display:none">
+            <div class="evt-form">
+              <div class="field-row" style="margin-bottom:8px">
+                <div><input id="ef-date" type="text" placeholder="Год или дата"></div>
+                <div><input id="ef-title" type="text" placeholder="Название события"></div>
+              </div>
+              <textarea id="ef-desc" rows="2" placeholder="Описание (необязательно)" style="margin-bottom:8px"></textarea>
+              <div class="upload-actions">
+                <button class="btn-cancel" onclick="hideEventForm()">Отмена</button>
+                <button class="btn-apply" onclick="saveEvent()">Добавить</button>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div class="panel-sep"></div>
+        <div class="panel-section-title">Добавить родственника</div>
+        <button class="rel-btn" onclick="addParents()"><span class="icon">↑</span> Добавить родителей (пара)</button>
+        <button class="rel-btn" onclick="openPickParent()"><span class="icon">＋</span> Добавить ещё одного родителя</button>
+        <button class="rel-btn" onclick="addRelative('child')"><span class="icon">↓</span> Добавить ребёнка</button>
+        <button class="rel-btn" onclick="addRelative('spouse')"><span class="icon">⇔</span> Добавить супруга/у</button>
+        <button class="rel-btn" onclick="addRelative('sibling')"><span class="icon">↔</span> Добавить брата/сестру</button>
+        <div class="panel-sep"></div>
+        <button class="del-btn" onclick="deletePerson()">Удалить этого человека</button>
+      </div>
+
+      <div id="tab-photos" class="tab-pane">
+        <div class="gallery-header">
+          <h4>Общие фотографии</h4>
+          <button class="gallery-upload-btn edit-only" onclick="openPhotoUpload()">+ Загрузить</button>
+        </div>
+        <div id="photo-gallery"></div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- Overlays -->
+<div id="pick-overlay" class="overlay">
+  <div class="overlay-box" style="width:320px">
+    <h4>Выбери существующего родителя</h4>
+    <div id="pick-list"></div>
+    <button class="pick-cancel" onclick="closePickParent()">Отмена</button>
+  </div>
+</div>
+
+<div id="photo-upload-overlay" class="overlay">
+  <div class="overlay-box" style="width:min(460px,90vw)">
+    <h4>Загрузить фотографии</h4>
+    <div class="photo-drop-zone" id="photo-drop-zone">Нажмите или перетащите изображения сюда</div>
+    <div class="upload-previews" id="upload-previews"></div>
+    <div class="tag-section">
+      <label>Отметить людей на фото:</label>
+      <div class="tag-chips" id="tag-chips"></div>
+    </div>
+    <div class="upload-actions">
+      <button class="btn-cancel" onclick="closePhotoUpload()">Отмена</button>
+      <button class="btn-apply" onclick="saveUploadedPhotos()">Сохранить</button>
+    </div>
+  </div>
+</div>
+
+<div id="sib-overlay" class="overlay">
+  <div class="overlay-box" style="width:280px">
+    <h4>Тип связи</h4>
+    <div id="sib-options"></div>
+    <button class="pick-cancel" onclick="closeSibPicker()">Отмена</button>
+  </div>
+</div>
+
+<div id="lightbox" onclick="closeLightbox()"><img id="lightbox-img" src=""></div>
+
+<div id="filter-panel"></div>
+<div id="color-legend"></div>
+<div id="hint">Клик — связи · 2x клик — редактировать · Колёсико — масштаб · ПКМ — навигация</div>
+<input type="file" id="file-input" accept=".json" style="display:none" onchange="loadFile(event)">
+<input type="file" id="photo-file-input" accept="image/*" multiple style="display:none" onchange="handlePhotoFiles(event)">
+
+<script>
+// ═══════════════════════════════════════════════
+// DATA
+// ═══════════════════════════════════════════════
+let nodes={},edges=[],sel=null,focused=null,seq=1,clickTimer=null,currentView='tree',viewOnly=false;
+let multiSel=new Set(),activeFilters=null;
+const canvasEl=document.getElementById('canvas'),svgEl=document.getElementById('lines'),wrap=document.getElementById('canvas-wrap');
+const NODE_W=164,PARENT_V_GAP=60,SPOUSE_H_GAP=20,SIBLING_H_GAP=220,CHILD_V_GAP=260;
+const FAMILY_COLORS=['#d4915e','#5b9bd5','#c75050','#4caf7a','#9c6ade','#e07bb0','#26a69a','#ef6c00','#7986cb','#78909c'];
+let surnameColorMap={},surnameColorIdx=0,searchQuery='',familyColors={};
+
+const STORAGE_KEY='family-tree-save';
+function saveState(){
+  try{localStorage.setItem(STORAGE_KEY,JSON.stringify({nodes:Object.values(nodes),edges,seq,familyColors}))}catch(e){}
+}
+function loadState(){
+  try{
+    const raw=localStorage.getItem(STORAGE_KEY);
+    if(!raw)return false;
+    const data=JSON.parse(raw);
+    if(!data.nodes||!data.nodes.length)return false;
+    data.nodes.forEach(p=>{
+      p.profession=p.profession||'';p.birthPlace=p.birthPlace||'';
+      p.burialPlace=p.burialPlace||'';p.nationality=p.nationality||'';
+      p.events=p.events||[];p.bio=p.bio||'';
+      p.maidenName=p.maidenName||'';
+      if(p.generation===undefined)p.generation=null;
+      if(p.deceased===undefined)p.deceased=false;
+      nodes[p.id]=p;
+      if(p.id>=seq)seq=p.id+1;
+    });
+    if(data.seq&&data.seq>=seq)seq=data.seq;
+    edges=data.edges||[];
+    if(data.familyColors)familyColors=data.familyColors;
+    return true;
+  }catch(e){return false}
+}
+
+function uid(){return seq++}
+function gc(g){return g==='m'?'male':g==='f'?'female':''}
+function nodeH(id){const el=document.getElementById('n'+id);return el?el.offsetHeight:90}
+let dragHappened=false;
+function makeDraggable(el,id){
+  let sx,sy,active=false,origins={};
+  el.addEventListener('mousedown',e=>{
+    if(e.button!==0||viewOnly)return;
+    active=true;dragHappened=false;
+    sx=e.clientX;sy=e.clientY;
+    origins={};
+    if(multiSel.has(id)){
+      multiSel.forEach(mid=>{if(nodes[mid])origins[mid]={x:nodes[mid].x,y:nodes[mid].y}});
+    } else {
+      origins[id]={x:nodes[id].x,y:nodes[id].y};
+    }
+    e.preventDefault();
+  });
+  window.addEventListener('mousemove',e=>{
+    if(!active)return;
+    const dx=(e.clientX-sx)/zoom,dy=(e.clientY-sy)/zoom;
+    if(Math.abs(dx)>3||Math.abs(dy)>3)dragHappened=true;
+    Object.keys(origins).forEach(mid=>{
+      const n=nodes[mid];if(!n)return;
+      n.x=origins[mid].x+dx;n.y=origins[mid].y+dy;
+      const nel=document.getElementById('n'+mid);
+      if(nel){nel.style.left=n.x+'px';nel.style.top=n.y+'px'}
+    });
+    drawLines();
+  });
+  window.addEventListener('mouseup',e=>{if(e.button===0){if(active&&dragHappened)saveState();active=false;dragHappened=false;}});
+}
+
+// ═══════════════════════════════════════════════
+// IndexedDB
+// ═══════════════════════════════════════════════
+const DB_NAME='FamilyTreePhotos';let idb=null,allPhotos=[];
+function openIDB(){return new Promise((r,j)=>{const q=indexedDB.open(DB_NAME,1);q.onupgradeneeded=e=>{const d=e.target.result;if(!d.objectStoreNames.contains('photos'))d.createObjectStore('photos',{keyPath:'id'})};q.onsuccess=e=>{idb=e.target.result;r()};q.onerror=j})}
+function idbGetAll(){return new Promise((r,j)=>{const t=idb.transaction('photos','readonly');const q=t.objectStore('photos').getAll();q.onsuccess=()=>r(q.result);q.onerror=j})}
+function idbPut(p){return new Promise((r,j)=>{const t=idb.transaction('photos','readwrite');t.objectStore('photos').put(p);t.oncomplete=()=>r();t.onerror=j})}
+function idbDelete(id){return new Promise((r,j)=>{const t=idb.transaction('photos','readwrite');t.objectStore('photos').delete(id);t.oncomplete=()=>r();t.onerror=j})}
+
+// ═══════════════════════════════════════════════
+// SURNAME COLORS
+// ═══════════════════════════════════════════════
+function normSurname(name){
+  if(!name||name==='?')return '';
+  const parts=name.trim().split(/\s+/);
+  if(parts.length<2)return '';
+  let s=parts[parts.length-1].toLowerCase();
+  if(s.length>3&&(s.endsWith('а')||s.endsWith('я')))s=s.slice(0,-1);
+  return s;
+}
+function normMaiden(raw){
+  if(!raw)return '';
+  let s=raw.trim().toLowerCase();
+  if(s.length>3&&(s.endsWith('а')||s.endsWith('я')))s=s.slice(0,-1);
+  return s;
+}
+function getSurnameColor(name){
+  const s=normSurname(name);
+  if(!s)return null;
+  if(familyColors[s])return familyColors[s];
+  if(!surnameColorMap[s]){surnameColorMap[s]=FAMILY_COLORS[surnameColorIdx%FAMILY_COLORS.length];surnameColorIdx++}
+  return surnameColorMap[s];
+}
+function setFamilyColor(surname,color){
+  familyColors[surname]=color;
+  surnameColorMap[surname]=color;
+  drawLines();renderLegend();saveState();
+}
+function rebuildSurnameColors(){
+  surnameColorMap={};surnameColorIdx=0;
+  Object.values(nodes).forEach(n=>{
+    const s=normSurname(n.name);
+    if(s){
+      if(familyColors[s]){surnameColorMap[s]=familyColors[s]}
+      else if(!surnameColorMap[s]){surnameColorMap[s]=FAMILY_COLORS[surnameColorIdx%FAMILY_COLORS.length];surnameColorIdx++}
+    }
+    const m=normMaiden(n.maidenName);
+    if(m&&m!==s){
+      if(familyColors[m]){surnameColorMap[m]=familyColors[m]}
+      else if(!surnameColorMap[m]){surnameColorMap[m]=FAMILY_COLORS[surnameColorIdx%FAMILY_COLORS.length];surnameColorIdx++}
+    }
+  });
+}
+
+// ═══════════════════════════════════════════════
+// GENERATIONS
+// ═══════════════════════════════════════════════
+function computeGenerations(){
+  const gen={};
+  const nodeIds=new Set(Object.keys(nodes).map(Number));
+  Object.values(nodes).forEach(n=>{if(n.generation!==null&&n.generation!==undefined)gen[n.id]=n.generation});
+  const roots=[...nodeIds].filter(id=>!edges.some(e=>+e.to===id&&e.type==='parent'&&nodeIds.has(+e.from)));
+  const queue=roots.map(id=>({id,g:gen[id]!==undefined?gen[id]:0}));
+  const visited=new Set();
+  while(queue.length){
+    const{id,g}=queue.shift();
+    if(visited.has(id)||!nodeIds.has(id))continue;
+    visited.add(id);
+    if(gen[id]===undefined)gen[id]=g;
+    const curG=gen[id];
+    edges.forEach(e=>{
+      if(e.type==='spouse'){
+        const o=+e.from===id?+e.to:(+e.to===id?+e.from:null);
+        if(o&&!visited.has(o)&&nodeIds.has(o)){if(gen[o]===undefined)gen[o]=curG;queue.push({id:o,g:gen[o]})}
+      }
+      if(e.type==='parent'&&+e.from===id&&!visited.has(+e.to)&&nodeIds.has(+e.to)){if(gen[+e.to]===undefined)gen[+e.to]=curG+1;queue.push({id:+e.to,g:gen[+e.to]})}
+    });
+  }
+  Object.keys(nodes).forEach(id=>{if(gen[+id]===undefined)gen[+id]=0});
+  return gen;
+}
+
+function toRoman(n){const v=[1000,900,500,400,100,90,50,40,10,9,5,4,1],s=['M','CM','D','CD','C','XC','L','XL','X','IX','V','IV','I'];let r='';for(let i=0;i<v.length;i++)while(n>=v[i]){r+=s[i];n-=v[i]}return r}
+
+let focusedGen=null;
+function renderGenLabels(){
+  document.querySelectorAll('.gen-label').forEach(el=>el.remove());
+  if(Object.keys(nodes).length<2)return;
+  const gen=computeGenerations();
+  const byGen={};
+  Object.entries(gen).forEach(([id,g])=>{if(!byGen[g])byGen[g]=[];byGen[g].push(+id)});
+  const minX=Math.min(...Object.values(nodes).map(n=>n.x))-140;
+  Object.entries(byGen).forEach(([g,ids])=>{
+    const valid=ids.filter(id=>nodes[id]);
+    if(!valid.length)return;
+    const avgY=valid.reduce((s,id)=>s+nodes[id].y,0)/valid.length;
+    const el=document.createElement('div');
+    el.className='gen-label'+(focusedGen===+g?' gen-active':'');
+    el.style.left=minX+'px';el.style.top=(avgY+10)+'px';
+    el.textContent=toRoman(+g+1);
+    el.addEventListener('click',e=>{e.stopPropagation();toggleGenFilter(+g)});
+    canvasEl.appendChild(el);
+  });
+}
+function toggleGenFilter(g){
+  focusedGen=focusedGen===g?null:g;
+  const gen=computeGenerations();
+  Object.keys(nodes).forEach(k=>{
+    const el=document.getElementById('n'+k);
+    if(!el)return;
+    const dim=focusedGen!==null&&gen[+k]!==focusedGen;
+    el.classList.toggle('dimmed',dim);
+  });
+  renderGenLabels();
+}
+
+// ═══════════════════════════════════════════════
+// ZOOM & PAN
+// ═══════════════════════════════════════════════
+let zoom=1,panX=0,panY=0;
+function applyTransform(){canvasEl.style.transform=`translate(${panX}px,${panY}px) scale(${zoom})`;document.getElementById('zoom-display').textContent=Math.round(zoom*100)+'%'}
+wrap.addEventListener('wheel',e=>{e.preventDefault();const r=wrap.getBoundingClientRect(),mx=e.clientX-r.left,my=e.clientY-r.top,f=e.deltaY>0?.92:1.08,nz=Math.max(.08,Math.min(4,zoom*f)),rt=nz/zoom;panX=mx-rt*(mx-panX);panY=my-rt*(my-panY);zoom=nz;applyTransform()},{passive:false});
+wrap.addEventListener('mousedown',e=>{if(e.button===1)e.preventDefault()});
+wrap.addEventListener('auxclick',e=>{if(e.button===1)e.preventDefault()});
+(function(){let p=false,sx,sy,spx,spy;wrap.addEventListener('mousedown',e=>{if(e.button!==2)return;e.preventDefault();p=true;sx=e.clientX;sy=e.clientY;spx=panX;spy=panY;wrap.classList.add('panning')});window.addEventListener('mousemove',e=>{if(!p)return;e.preventDefault();panX=spx+(e.clientX-sx);panY=spy+(e.clientY-sy);applyTransform()});window.addEventListener('mouseup',e=>{if(e.button!==2)return;p=false;wrap.classList.remove('panning')});wrap.addEventListener('contextmenu',e=>e.preventDefault())})();
+function resetZoom(){zoom=1;panX=0;panY=0;applyTransform()}
+
+// ═══════════════════════════════════════════════
+// SEARCH
+// ═══════════════════════════════════════════════
+function onSearch(q){
+  searchQuery=q.toLowerCase().trim();
+  Object.keys(nodes).forEach(k=>renderNode(+k));
+  drawLines();
+}
+function matchesSearch(p){
+  if(!searchQuery)return true;
+  const fields=[p.name,p.dates,p.profession,p.bio,p.birthPlace,p.nationality,p.burialPlace,p.maidenName];
+  return fields.some(f=>f&&f.toLowerCase().includes(searchQuery));
+}
+
+// ═══════════════════════════════════════════════
+// NODE RENDERING
+// ═══════════════════════════════════════════════
+function createNode(name='',dates='',gender='u',x=600,y=500){
+  const id=uid();
+  nodes[id]={id,name,dates,gender,bio:'',profession:'',birthPlace:'',burialPlace:'',nationality:'',maidenName:'',generation:null,deceased:false,events:[],x,y};
+  renderNode(id);return id;
+}
+
+function renderNode(id){
+  const p=nodes[id];if(!p)return;
+  let el=document.getElementById('n'+id);
+  if(!el){el=document.createElement('div');el.className='node';el.id='n'+id;canvasEl.appendChild(el);makeDraggable(el,id)}
+  el.style.left=p.x+'px';el.style.top=p.y+'px';
+
+  const isFoc=focused===id;
+  const connSet=focused?getConnectedIds(focused):null;
+  const isDimFocus=focused&&!connSet.has(id);
+  const isDimSearch=searchQuery&&!matchesSearch(p);
+  const isDimFilter=activeFilters&&!passesFilter(id);
+  const isDimGen=focusedGen!==null&&computeGenerations()[id]!==focusedGen;
+  el.classList.toggle('dimmed',isDimFocus||isDimSearch||isDimFilter||isDimGen);
+  el.classList.toggle('focused',isFoc);
+  el.classList.toggle('multi-selected',multiSel.has(id));
+
+  const isSel=sel===id;
+  const dn=p.name==='?'?'<span class="unk-badge">Неизвестно</span>':(p.name||'<span style="color:#ccc;font-size:11px">Без имени</span>');
+  const dd=p.dates==='?'?'<div class="card-dates" style="font-style:italic">Неизвестно</div>':(p.dates?`<div class="card-dates">${p.dates}</div>`:'');
+  const ageInfo=calcAge(p.dates);
+  const da=ageInfo?`<div class="card-age">${ageInfo.alive?pluralAge(ageInfo.age):'† '+pluralAge(ageInfo.age)}</div>`:'';
+  const dp=p.profession?`<div class="card-profession">${p.profession}</div>`:'';
+  const pc=allPhotos.filter(ph=>(ph.tagged||[]).includes(id)).length;
+  const badge=pc?`<div class="card-photos-badge">${pc}</div>`:'';
+
+  el.innerHTML=`<div class="card ${gc(p.gender)} ${isSel?'selected':''}" style="position:relative">${badge}<div class="card-name">${dn}</div>${dd}${da}${dp}</div>`;
+
+  const card=el.querySelector('.card');
+  card.addEventListener('click',e=>{
+    e.stopPropagation();if(dragHappened)return;
+    if(e.ctrlKey||e.metaKey){
+      if(multiSel.has(id))multiSel.delete(id);else multiSel.add(id);
+      Object.keys(nodes).forEach(k=>renderNode(+k));return;
+    }
+    if(clickTimer){clearTimeout(clickTimer);clickTimer=null;return}
+    clickTimer=setTimeout(()=>{clickTimer=null;multiSel.clear();toggleFocus(id)},250);
+  });
+  card.addEventListener('dblclick',e=>{
+    e.stopPropagation();if(dragHappened)return;
+    if(clickTimer){clearTimeout(clickTimer);clickTimer=null}
+    openModal(id);
+  });
+}
+
+
+// ═══════════════════════════════════════════════
+// FOCUS
+// ═══════════════════════════════════════════════
+function getConnectedIds(id){
+  const s=new Set();s.add(id);
+  const directNeighbors=new Set();
+  edges.forEach(e=>{
+    if(+e.from===id)directNeighbors.add(+e.to);
+    if(+e.to===id)directNeighbors.add(+e.from);
+  });
+  directNeighbors.forEach(nid=>{s.add(nid);
+    edges.forEach(e=>{
+      if(+e.from===nid)s.add(+e.to);
+      if(+e.to===nid)s.add(+e.from);
+    });
+  });
+  return s;
+}
+function toggleFocus(id){focused=(focused===id)?null:id;Object.keys(nodes).forEach(k=>renderNode(+k));drawLines()}
+function clearFocus(){if(!focused)return;focused=null;Object.keys(nodes).forEach(k=>renderNode(+k));drawLines()}
+
+// ═══════════════════════════════════════════════
+// MODAL
+// ═══════════════════════════════════════════════
+const modalOverlay=document.getElementById('modal-overlay');
+function openModal(id){
+  sel=id;Object.keys(nodes).forEach(k=>renderNode(+k));
+  const p=nodes[id];
+  const ageInfo=calcAge(p.dates);
+  const ageStr=ageInfo?(ageInfo.alive?', '+pluralAge(ageInfo.age):', † '+pluralAge(ageInfo.age)):'';
+  document.getElementById('panel-name').textContent=(p.name==='?'?'Неизвестно':(p.name||'Без имени'))+ageStr;
+  if(viewOnly){
+    buildViewOnlyDetails(p);
+  } else {
+    document.getElementById('f-name').value=p.name||'';
+    document.getElementById('f-dates').value=p.dates||'';
+    document.getElementById('f-gender').value=p.gender||'u';
+    document.getElementById('f-profession').value=p.profession||'';
+    document.getElementById('f-deceased').checked=!!p.deceased;
+    document.getElementById('f-generation').value=p.generation!==null&&p.generation!==undefined?p.generation:'';
+    document.getElementById('f-bio').value=p.bio||'';
+    document.getElementById('f-birthPlace').value=p.birthPlace||'';
+    document.getElementById('f-burialPlace').value=p.burialPlace||'';
+    document.getElementById('f-nationality').value=p.nationality||'';
+    document.getElementById('f-maidenName').value=p.maidenName||'';
+  }
+  document.querySelectorAll('.modal-tab').forEach(t=>t.classList.toggle('active',t.dataset.tab==='details'));
+  document.querySelectorAll('.tab-pane').forEach(t=>t.classList.toggle('active',t.id==='tab-details'));
+  if(viewOnly){renderGroupPhotos()}else{renderGallery();renderEvents()}
+  modalOverlay.classList.add('open');document.getElementById('hint').style.opacity='0';
+}
+function buildViewOnlyDetails(p){
+  const tab=document.getElementById('tab-details');
+  const genderMap={m:'Мужской',f:'Женский'};
+  const genDisplay=p.generation!==null&&p.generation!==undefined?toRoman(p.generation+1):'';
+  const deceasedText=p.deceased?(p.gender==='f'?'Умерла':'Умер'):'';
+  const rows=[
+    ['Даты',p.dates],['Статус',deceasedText],['Пол',genderMap[p.gender]||''],['Поколение',genDisplay],
+    ['Место рождения',p.birthPlace],['Национальность',p.nationality],['Девичья фамилия',p.maidenName],
+    ['Профессия',p.profession],['Место захоронения',p.burialPlace]
+  ].filter(r=>r[1]&&r[1]!=='?'&&r[1].trim());
+  let html='<div class="vo-details">';
+  rows.forEach(([l,v])=>{html+=`<div class="vo-row"><span class="vo-label">${l}</span><span class="vo-val">${v}</span></div>`});
+  html+='</div>';
+  if(p.bio&&p.bio!=='?'&&p.bio.trim()) html+=`<div class="vo-bio">${p.bio.replace(/</g,'&lt;')}</div>`;
+
+  const personal=allPhotos.filter(ph=>(ph.tagged||[]).includes(p.id)&&(ph.tagged||[]).length<=1);
+  if(personal.length){
+    html+='<div style="margin-top:14px"><div style="font-size:11px;color:var(--text-muted);text-transform:uppercase;letter-spacing:.06em;font-weight:500;margin-bottom:8px">Фотографии</div><div class="photo-grid">';
+    personal.forEach(ph=>{html+=`<div class="photo-card"><img src="${ph.dataUrl}" onclick="openLightbox('${ph.id}')"></div>`});
+    html+='</div></div>';
+  }
+
+  const evts=p.events||[];
+  if(evts.length){
+    html+='<div style="margin-top:14px"><div style="font-size:11px;color:var(--text-muted);text-transform:uppercase;letter-spacing:.06em;font-weight:500;margin-bottom:8px">Жизненные события</div><div class="evt-list">';
+    evts.forEach(ev=>{
+      html+=`<div class="evt-item"><div class="evt-date">${ev.date||'—'}</div><div class="evt-title">${ev.title||'Без названия'}</div>${ev.description?`<div class="evt-desc">${ev.description}</div>`:''}</div>`;
+    });
+    html+='</div></div>';
+  }
+
+  tab.innerHTML=html;
+}
+function closePanel(){sel=null;modalOverlay.classList.remove('open');document.getElementById('hint').style.opacity='1';Object.keys(nodes).forEach(k=>renderNode(+k))}
+modalOverlay.addEventListener('click',e=>{if(e.target===modalOverlay)closePanel()});
+canvasEl.addEventListener('click',e=>{if(e.target===canvasEl||e.target===svgEl){closePanel();clearFocus();if(focusedGen!==null){focusedGen=null;Object.keys(nodes).forEach(k=>renderNode(+k));renderGenLabels()}if(multiSel.size){multiSel.clear();Object.keys(nodes).forEach(k=>renderNode(+k))}}});
+function switchTab(btn){document.querySelectorAll('.modal-tab').forEach(t=>t.classList.remove('active'));document.querySelectorAll('.tab-pane').forEach(t=>t.classList.remove('active'));btn.classList.add('active');document.getElementById('tab-'+btn.dataset.tab).classList.add('active')}
+function uf(field,val){if(!sel)return;nodes[sel][field]=val;if(field==='name'||field==='maidenName'){if(field==='name')document.getElementById('panel-name').textContent=val==='?'?'Неизвестно':(val||'Без имени');rebuildSurnameColors();drawLines();renderLegend()}if(field==='generation'){Object.keys(nodes).forEach(k=>renderNode(+k));renderGenLabels()}else{renderNode(sel)}saveState()}
+function setUnknown(field){if(!sel)return;nodes[sel][field]='?';document.getElementById('f-'+field).value='?';if(field==='name')document.getElementById('panel-name').textContent='Неизвестно';renderNode(sel);saveState()}
+
+// ═══════════════════════════════════════════════
+// EVENTS
+// ═══════════════════════════════════════════════
+function renderEvents(){
+  const container=document.getElementById('event-list');
+  const p=nodes[sel];if(!p)return;
+  const evts=p.events||[];
+  document.getElementById('events-count').textContent=evts.length?`(${evts.length})`:'';
+  hideEventForm();
+  if(!evts.length){container.innerHTML='<div class="empty-events">Нет событий. Нажмите «+ Добавить».</div>';return}
+  let html='<div class="evt-list">';
+  evts.forEach((ev,i)=>{
+    html+=`<div class="evt-item">
+      <button class="evt-del" onclick="deleteEvent(${i})">&times;</button>
+      <div class="evt-date">${ev.date||'—'}</div>
+      <div class="evt-title">${ev.title||'Без названия'}</div>
+      ${ev.description?`<div class="evt-desc">${ev.description}</div>`:''}
+    </div>`;
+  });
+  html+='</div>';
+  container.innerHTML=html;
+}
+function showEventForm(){document.getElementById('event-form-wrap').style.display='block';document.getElementById('ef-date').value='';document.getElementById('ef-title').value='';document.getElementById('ef-desc').value='';document.getElementById('ef-date').focus()}
+function hideEventForm(){document.getElementById('event-form-wrap').style.display='none'}
+function saveEvent(){
+  if(!sel)return;const p=nodes[sel];if(!p.events)p.events=[];
+  const date=document.getElementById('ef-date').value.trim();
+  const title=document.getElementById('ef-title').value.trim();
+  const description=document.getElementById('ef-desc').value.trim();
+  if(!title)return;
+  p.events.push({date,title,description});
+  p.events.sort((a,b)=>{const ya=parseInt(a.date)||0,yb=parseInt(b.date)||0;return ya-yb});
+  renderEvents();saveState();
+}
+function deleteEvent(i){if(!sel)return;const p=nodes[sel];if(!p.events)return;p.events.splice(i,1);renderEvents();saveState()}
+
+// ═══════════════════════════════════════════════
+// PHOTO GALLERY
+// ═══════════════════════════════════════════════
+function renderGallery(){
+  const all=allPhotos.filter(ph=>(ph.tagged||[]).includes(sel));
+  const personal=all.filter(ph=>(ph.tagged||[]).length<=1);
+  const group=all.filter(ph=>(ph.tagged||[]).length>1);
+
+  const pc=document.getElementById('personal-photo-gallery');
+  if(personal.length){
+    let h='<div class="photo-grid">';
+    personal.forEach(ph=>{h+=`<div class="photo-card"><img src="${ph.dataUrl}" onclick="openLightbox('${ph.id}')"><button class="pc-del edit-only" onclick="deletePhoto('${ph.id}')">&times;</button></div>`});
+    h+='</div>';pc.innerHTML=h;
+    document.getElementById('personal-photos-sep').style.display='';
+    document.getElementById('personal-photos-section').style.display='';
+  } else {
+    pc.innerHTML='';
+    document.getElementById('personal-photos-sep').style.display='none';
+    document.getElementById('personal-photos-section').style.display='none';
+  }
+
+  const gc=document.getElementById('photo-gallery');
+  document.getElementById('photos-count').textContent=group.length?`(${group.length})`:'';
+  if(!group.length){gc.innerHTML='<div class="empty-gallery">Нет общих фотографий с другими людьми.</div>';return}
+  let h='<div class="photo-grid">';
+  group.forEach(ph=>{const names=(ph.tagged||[]).map(pid=>{const n=nodes[pid];return n?(n.name==='?'?'?':(n.name||'?')):'?'}).join(', ');h+=`<div class="photo-card"><img src="${ph.dataUrl}" onclick="openLightbox('${ph.id}')"><div class="pc-tags">${names}</div><button class="pc-del edit-only" onclick="deletePhoto('${ph.id}')">&times;</button></div>`});
+  h+='</div>';gc.innerHTML=h;
+}
+function renderGroupPhotos(){
+  const group=allPhotos.filter(ph=>(ph.tagged||[]).includes(sel)&&(ph.tagged||[]).length>1);
+  const gc=document.getElementById('photo-gallery');
+  document.getElementById('photos-count').textContent=group.length?`(${group.length})`:'';
+  if(!group.length){gc.innerHTML='<div class="empty-gallery">Нет общих фотографий с другими людьми.</div>';return}
+  let h='<div class="photo-grid">';
+  group.forEach(ph=>{const names=(ph.tagged||[]).map(pid=>{const n=nodes[pid];return n?(n.name==='?'?'?':(n.name||'?')):'?'}).join(', ');h+=`<div class="photo-card"><img src="${ph.dataUrl}" onclick="openLightbox('${ph.id}')"><div class="pc-tags">${names}</div></div>`});
+  h+='</div>';gc.innerHTML=h;
+}
+function openLightbox(pid){const ph=allPhotos.find(p=>p.id===pid);if(!ph)return;document.getElementById('lightbox-img').src=ph.dataUrl;document.getElementById('lightbox').classList.add('open')}
+function closeLightbox(){document.getElementById('lightbox').classList.remove('open')}
+async function deletePhoto(pid){await idbDelete(pid);allPhotos=allPhotos.filter(p=>p.id!==pid);renderGallery();Object.keys(nodes).forEach(k=>renderNode(+k))}
+
+let pendingFiles=[],taggedIds=new Set();
+function openPhotoUpload(){pendingFiles=[];taggedIds=new Set();if(sel)taggedIds.add(sel);document.getElementById('upload-previews').innerHTML='';renderTagChips();document.getElementById('photo-upload-overlay').classList.add('open')}
+function closePhotoUpload(){document.getElementById('photo-upload-overlay').classList.remove('open');pendingFiles=[]}
+function renderTagChips(){const c=document.getElementById('tag-chips');c.innerHTML='';Object.values(nodes).forEach(n=>{const l=n.name&&n.name!=='?'?n.name:'ID:'+n.id;const ch=document.createElement('div');ch.className='tag-chip'+(taggedIds.has(n.id)?' checked':'');ch.textContent=l;ch.onclick=()=>{if(taggedIds.has(n.id))taggedIds.delete(n.id);else taggedIds.add(n.id);ch.classList.toggle('checked')};c.appendChild(ch)})}
+const photoDropZone=document.getElementById('photo-drop-zone');
+photoDropZone.addEventListener('click',()=>document.getElementById('photo-file-input').click());
+photoDropZone.addEventListener('dragover',e=>{e.preventDefault();photoDropZone.classList.add('drag-over')});
+photoDropZone.addEventListener('dragleave',()=>photoDropZone.classList.remove('drag-over'));
+photoDropZone.addEventListener('drop',e=>{e.preventDefault();photoDropZone.classList.remove('drag-over');readFiles(e.dataTransfer.files)});
+function handlePhotoFiles(e){readFiles(e.target.files);e.target.value=''}
+function readFiles(files){[...files].forEach(f=>{if(!f.type.startsWith('image/'))return;const r=new FileReader();r.onload=ev=>{pendingFiles.push({name:f.name,dataUrl:ev.target.result});const img=document.createElement('img');img.src=ev.target.result;document.getElementById('upload-previews').appendChild(img)};r.readAsDataURL(f)})}
+async function saveUploadedPhotos(){if(!pendingFiles.length)return;const tagged=[...taggedIds];for(const f of pendingFiles){const photo={id:'ph_'+Date.now()+'_'+Math.random().toString(36).slice(2,7),name:f.name,dataUrl:f.dataUrl,tagged,ts:Date.now()};await idbPut(photo);allPhotos.push(photo)}closePhotoUpload();renderGallery();Object.keys(nodes).forEach(k=>renderNode(+k))}
+
+// ═══════════════════════════════════════════════
+// RELATIONS
+// ═══════════════════════════════════════════════
+function addParents(){if(!sel)return;const c=nodes[sel];const fId=createNode('Отец','','m',c.x-SPOUSE_H_GAP/2-NODE_W/2,c.y-PARENT_V_GAP);const mId=createNode('Мать','','f',c.x+SPOUSE_H_GAP/2+NODE_W/2,c.y-PARENT_V_GAP);edges.push({from:fId,to:sel,type:'parent'},{from:mId,to:sel,type:'parent'},{from:fId,to:mId,type:'spouse'});rebuildSurnameColors();autoLayout();saveState();openModal(fId)}
+function openPickParent(){if(!sel)return;const cp=edges.filter(e=>+e.to===sel&&e.type==='parent').map(e=>+e.from);const cands=Object.keys(nodes).filter(k=>+k!==sel&&!cp.includes(+k));const l=document.getElementById('pick-list');l.innerHTML='';if(!cands.length){l.innerHTML='<div style="font-size:13px;color:var(--text-dim);padding:8px 0">Нет подходящих.</div>'}else{cands.forEach(k=>{const n=nodes[k];const div=document.createElement('div');div.className='pick-item';div.textContent=(n.name&&n.name!=='?'?n.name:'Без имени')+(n.dates&&n.dates!=='?'?' · '+n.dates:'');div.onclick=()=>{if(!edges.some(e=>+e.from===+k&&+e.to===sel&&e.type==='parent'))edges.push({from:+k,to:sel,type:'parent'});drawLines();saveState();closePickParent()};l.appendChild(div)})}document.getElementById('pick-overlay').classList.add('open')}
+function closePickParent(){document.getElementById('pick-overlay').classList.remove('open')}
+function addRelative(type){if(!sel)return;if(type==='sibling'){openSibPicker();return}const p=nodes[sel];let nx=p.x,ny=p.y;if(type==='child'){nx=p.x;ny=p.y+CHILD_V_GAP}if(type==='spouse'){nx=p.x+SPOUSE_H_GAP;ny=p.y}const nid=createNode('','','u',nx,ny);if(type==='child')edges.push({from:sel,to:nid,type:'parent'});if(type==='spouse')edges.push({from:sel,to:nid,type:'spouse'});autoLayout();saveState();openModal(nid)}
+const sibLabels=['Брат','Сестра','Сводный брат','Сводная сестра','Близнец / Близняшка'];
+function openSibPicker(){const c=document.getElementById('sib-options');c.innerHTML='';sibLabels.forEach(l=>{const d=document.createElement('div');d.className='pick-item';d.textContent=l;d.onclick=()=>{createSibling(l.toLowerCase());closeSibPicker()};c.appendChild(d)});document.getElementById('sib-overlay').classList.add('open')}
+function closeSibPicker(){document.getElementById('sib-overlay').classList.remove('open')}
+function createSibling(label){if(!sel)return;const p=nodes[sel];const nid=createNode('','','u',p.x+SIBLING_H_GAP,p.y);const parents=edges.filter(e=>+e.to===sel&&e.type==='parent').map(e=>+e.from);parents.forEach(pid=>edges.push({from:pid,to:nid,type:'parent'}));edges.push({from:sel,to:nid,type:'sibling',label});autoLayout();saveState();openModal(nid)}
+function addOrphan(){const ids=Object.keys(nodes);const x=ids.length?Math.max(...ids.map(k=>nodes[k].x))+240:600;const y=ids.length?nodes[ids[ids.length-1]].y:500;const id=createNode('','','u',x,y);drawLines();saveState();openModal(id)}
+function deletePerson(){if(!sel)return;edges=edges.filter(e=>+e.from!==sel&&+e.to!==sel);const el=document.getElementById('n'+sel);if(el)el.remove();delete nodes[sel];closePanel();autoLayout();saveState()}
+
+// ═══════════════════════════════════════════════
+// DRAW LINES
+// ═══════════════════════════════════════════════
+function edgeColor(e,a,b,fallback){
+  if(e.color)return e.color;
+  return getSurnameColor(a.name)||getSurnameColor(b.name)||fallback;
+}
+function drawLines(){
+  svgEl.innerHTML='';
+  const W=NODE_W;
+
+  edges.forEach((e,i)=>{
+    const a=nodes[e.from],b=nodes[e.to];
+    if(!a||!b) return;
+    if(e.type==='sibling') return;
+    const aH=nodeH(e.from), bH=nodeH(e.to);
+
+    if(e.type==='spouse'){
+      const color=edgeColor(e,a,b,'#c8a96e');
+      const x1=a.x+W, y1=a.y+aH/2;
+      const x2=b.x,   y2=b.y+bH/2;
+      const d=`M${x1},${y1} C${x1+28},${y1} ${x2-28},${y2} ${x2},${y2}`;
+      svgEl.appendChild(mkHitArea(d,i));
+      svgEl.appendChild(mkPath(d,color,1.5,'6,3',0.6));
+
+    } else {
+      const color=edgeColor(e,a,b,'#c8a96e');
+      const x1=a.x+W/2, y1=a.y+aH;
+      const x2=b.x+W/2, y2=b.y;
+      const dist=Math.abs(y2-y1);
+      const hdist=Math.abs(x2-x1);
+      const cp=Math.max(60, dist*0.42, hdist*0.25);
+      const d=`M${x1},${y1} C${x1},${y1+cp} ${x2},${y2-cp} ${x2},${y2}`;
+      svgEl.appendChild(mkHitArea(d,i));
+      svgEl.appendChild(mkPath(d,color,1.6,'none',0.55));
+    }
+  });
+}
+
+function mkPath(d,stroke,width,dash,opacity){
+  const p=document.createElementNS('http://www.w3.org/2000/svg','path');
+  p.setAttribute('d',d); p.setAttribute('fill','none');
+  p.setAttribute('stroke',stroke); p.setAttribute('stroke-width',width);
+  p.setAttribute('stroke-linecap','round');
+  p.style.pointerEvents='none';
+  if(opacity!==undefined) p.setAttribute('stroke-opacity',opacity);
+  if(dash&&dash!=='none') p.setAttribute('stroke-dasharray',dash);
+  return p;
+}
+function mkHitArea(d,edgeIdx){
+  const p=document.createElementNS('http://www.w3.org/2000/svg','path');
+  p.setAttribute('d',d);p.setAttribute('fill','none');
+  p.setAttribute('stroke','transparent');p.setAttribute('stroke-width','14');
+  p.setAttribute('stroke-linecap','round');
+  p.style.pointerEvents='stroke';p.style.cursor='pointer';
+  p.addEventListener('click',ev=>{ev.stopPropagation();if(!viewOnly)showLineColorPicker(ev,edgeIdx)});
+  return p;
+}
+
+let activeLinePopup=null;
+function showLineColorPicker(ev,edgeIdx){
+  closeLineColorPicker();
+  const popup=document.createElement('div');
+  popup.className='line-color-popup';
+  popup.style.left=ev.clientX+'px';popup.style.top=ev.clientY+'px';
+
+  const ALL_COLORS=['#d4915e','#5b9bd5','#c75050','#4caf7a','#9c6ade','#e07bb0','#26a69a','#ef6c00','#7986cb','#78909c','#c8a96e','#e6c44d','#f06292','#4dd0e1'];
+  ALL_COLORS.forEach(c=>{
+    const sw=document.createElement('div');
+    sw.className='lcp-swatch';sw.style.background=c;
+    if(edges[edgeIdx]&&edges[edgeIdx].color===c)sw.classList.add('active');
+    sw.onclick=()=>{edges[edgeIdx].color=c;drawLines();saveState();closeLineColorPicker()};
+    popup.appendChild(sw);
+  });
+
+  const customWrap=document.createElement('div');
+  customWrap.className='lcp-custom-wrap';
+  const customInput=document.createElement('input');
+  customInput.type='color';customInput.className='lcp-custom-input';
+  customInput.value=edges[edgeIdx].color||'#c8a96e';
+  customInput.addEventListener('input',()=>{edges[edgeIdx].color=customInput.value;drawLines();saveState()});
+  const customLabel=document.createElement('span');
+  customLabel.className='lcp-custom-label';customLabel.textContent='Другой...';
+  customWrap.appendChild(customInput);customWrap.appendChild(customLabel);
+  customWrap.onclick=()=>customInput.click();
+  popup.appendChild(customWrap);
+
+  if(edges[edgeIdx]&&edges[edgeIdx].color){
+    const reset=document.createElement('div');
+    reset.className='lcp-reset';reset.textContent='Сбросить';
+    reset.onclick=()=>{delete edges[edgeIdx].color;drawLines();saveState();closeLineColorPicker()};
+    popup.appendChild(reset);
+  }
+
+  document.body.appendChild(popup);
+  activeLinePopup=popup;
+  requestAnimationFrame(()=>{
+    const r=popup.getBoundingClientRect();
+    if(r.right>window.innerWidth)popup.style.left=(window.innerWidth-r.width-8)+'px';
+    if(r.bottom>window.innerHeight)popup.style.top=(window.innerHeight-r.height-8)+'px';
+  });
+}
+function closeLineColorPicker(){
+  if(activeLinePopup){activeLinePopup.remove();activeLinePopup=null}
+}
+document.addEventListener('click',e=>{if(activeLinePopup&&!activeLinePopup.contains(e.target))closeLineColorPicker()});
+
+// ═══════════════════════════════════════════════
+// COLOR LEGEND
+// ═══════════════════════════════════════════════
+function renderLegend(){
+  const el=document.getElementById('color-legend');
+  const entries=Object.entries(surnameColorMap);
+  if(!entries.length){el.style.display='none';return}
+  el.style.display='';
+  const originalNames={};const maidenKeys=new Set();
+  Object.values(nodes).forEach(n=>{
+    const s=normSurname(n.name);
+    if(s&&!originalNames[s]){
+      const parts=n.name.trim().split(/\s+/);
+      originalNames[s]=parts[parts.length-1];
+    }
+    const m=normMaiden(n.maidenName);
+    if(m){maidenKeys.add(m);if(!originalNames[m])originalNames[m]=n.maidenName.trim()}
+  });
+  let html='<div class="legend-title">Семьи</div>';
+  entries.forEach(([surname,color])=>{
+    const raw=originalNames[surname]||surname;
+    const base=raw.charAt(0).toUpperCase()+raw.slice(1).toLowerCase();
+    const display=base+(base.endsWith('ы')?'':'ы')+(maidenKeys.has(surname)?' <span style="opacity:.45;font-size:10px"></span>':'');
+    html+=`<div class="legend-row">
+      <label class="legend-swatch-wrap">
+        <input type="color" value="${color}" onchange="setFamilyColor('${surname}',this.value)" class="legend-color-input">
+        <span class="legend-swatch" style="background:${color}"></span>
+      </label>
+      <span class="legend-name">${display}</span>
+    </div>`;
+  });
+  el.innerHTML=html;
+}
+
+// ═══════════════════════════════════════════════
+// FIT VIEW
+// ═══════════════════════════════════════════════
+function fitView(){const ids=Object.keys(nodes);if(!ids.length)return;const xs=ids.map(k=>nodes[k].x),ys=ids.map(k=>nodes[k].y);const mnX=Math.min(...xs),mxX=Math.max(...xs),mnY=Math.min(...ys),mxY=Math.max(...ys);const tW=mxX-mnX+NODE_W+80,tH=mxY-mnY+120+80,vW=wrap.clientWidth,vH=wrap.clientHeight;zoom=Math.min(vW/tW,vH/tH,1.5);panX=(vW-tW*zoom)/2-mnX*zoom+40*zoom;panY=(vH-tH*zoom)/2-mnY*zoom+40*zoom;applyTransform()}
+
+// ═══════════════════════════════════════════════
+// AUTO-LAYOUT
+// ═══════════════════════════════════════════════
+function autoLayout(){
+  const ids=Object.keys(nodes).map(Number);
+  if(!ids.length)return;
+  const GAP=24, V_GAP=140, SP_GAP=10, GROUP_GAP=80;
+
+  const childrenOf={},parentsOf={},spouseOf={},siblingsOf={};
+  ids.forEach(id=>{childrenOf[id]=[];parentsOf[id]=[];spouseOf[id]=[];siblingsOf[id]=[]});
+  edges.forEach(e=>{
+    const f=+e.from,t=+e.to;
+    if(!ids.includes(f)||!ids.includes(t))return;
+    if(e.type==='parent'){if(!childrenOf[f].includes(t))childrenOf[f].push(t);if(!parentsOf[t].includes(f))parentsOf[t].push(f)}
+    else if(e.type==='spouse'){if(!spouseOf[f].includes(t))spouseOf[f].push(t);if(!spouseOf[t].includes(f))spouseOf[t].push(f)}
+    else if(e.type==='sibling'){if(!siblingsOf[f].includes(t))siblingsOf[f].push(t);if(!siblingsOf[t].includes(f))siblingsOf[t].push(f)}
+  });
+
+  // Find disconnected subgraphs first
+  const globalVis=new Set();
+  const subgraphs=[];
+  function collectGroup(startId){
+    const group=new Set();
+    const q=[startId];
+    while(q.length){
+      const id=q.shift();
+      if(group.has(id))continue;
+      group.add(id);globalVis.add(id);
+      [...childrenOf[id],...parentsOf[id],...spouseOf[id],...siblingsOf[id]].forEach(n=>{if(!group.has(n))q.push(n)});
+    }
+    return [...group];
+  }
+  ids.forEach(id=>{if(!globalVis.has(id))subgraphs.push(collectGroup(id))});
+
+  const unitW=u=>u.ids.length*NODE_W+(u.ids.length-1)*SP_GAP;
+
+  function layoutSubgraph(subIds,offsetX){
+    const gen={},vis=new Set();
+    function walk(id,g){
+      if(vis.has(id))return;
+      vis.add(id);gen[id]=g;
+      spouseOf[id].forEach(s=>{if(!vis.has(s)){vis.add(s);gen[s]=g}});
+      siblingsOf[id].forEach(s=>{if(!vis.has(s))walk(s,g)});
+      childrenOf[id].forEach(c=>walk(c,g+1));
+      parentsOf[id].forEach(p=>walk(p,g-1));
+    }
+    const roots=subIds.filter(id=>parentsOf[id].length===0);
+    (roots.length?roots:[subIds[0]]).forEach(r=>{if(!vis.has(r))walk(r,0)});
+    subIds.forEach(id=>{if(!vis.has(id))walk(id,0)});
+    const minG=Math.min(...subIds.map(id=>gen[id]));
+    subIds.forEach(id=>gen[id]-=minG);
+
+    const unitOf={};
+    const units=[];
+    const placed=new Set();
+    subIds.forEach(id=>{
+      if(placed.has(id))return;
+      placed.add(id);
+      const u=[id];
+      spouseOf[id].forEach(s=>{if(!placed.has(s)&&subIds.includes(s)&&gen[s]===gen[id]){placed.add(s);u.push(s)}});
+      const ui=units.length;
+      units.push({ids:u,gen:gen[id]});
+      u.forEach(n=>unitOf[n]=ui);
+    });
+
+    const unitChildren={};
+    units.forEach((u,ui)=>{
+      const kids=new Set();
+      u.ids.forEach(id=>childrenOf[id].forEach(c=>{if(unitOf[c]!==undefined)kids.add(unitOf[c])}));
+      unitChildren[ui]=[...kids];
+    });
+
+    const ux={};
+    const unitsByGen={};
+    units.forEach((u,i)=>{(unitsByGen[u.gen]=unitsByGen[u.gen]||[]).push(i)});
+    const genKeys=Object.keys(unitsByGen).map(Number).sort((a,b)=>a-b);
+
+    const widest=genKeys.reduce((mx,g)=>{
+      const row=unitsByGen[g]||[];
+      const w=row.reduce((s,ui)=>s+unitW(units[ui]),0)+(row.length-1)*GAP;
+      return Math.max(mx,w);
+    },0);
+
+    genKeys.forEach(g=>{
+      const row=unitsByGen[g]||[];
+      const totalW=row.reduce((s,ui)=>s+unitW(units[ui]),0)+(row.length-1)*GAP;
+      let x=(widest-totalW)/2;
+      row.forEach(ui=>{ux[ui]=x;x+=unitW(units[ui])+GAP});
+    });
+
+    function getSubtreeUnits(ui){
+      const s=new Set();const q=[ui];
+      while(q.length){const c=q.shift();if(s.has(c))continue;s.add(c);(unitChildren[c]||[]).forEach(ch=>q.push(ch))}
+      return s;
+    }
+
+    for(let pass=0;pass<4;pass++){
+      genKeys.forEach(g=>{
+        (unitsByGen[g]||[]).forEach(ui=>{
+          const kids=unitChildren[ui];if(!kids.length)return;
+          const kl=Math.min(...kids.map(k=>ux[k]));
+          const kr=Math.max(...kids.map(k=>ux[k]+unitW(units[k])));
+          ux[ui]=(kl+kr)/2-unitW(units[ui])/2;
+        });
+      });
+      genKeys.forEach(g=>{
+        const row=(unitsByGen[g]||[]).sort((a,b)=>ux[a]-ux[b]);
+        for(let i=1;i<row.length;i++){
+          const prev=row[i-1],cur=row[i];
+          const minX=ux[prev]+unitW(units[prev])+GAP;
+          if(ux[cur]<minX){
+            const shift=minX-ux[cur];
+            getSubtreeUnits(cur).forEach(s=>{ux[s]+=shift});
+          }
+        }
+      });
+    }
+
+    // Normalize so subgraph starts at x=0, return width
+    const minUx=Math.min(...units.map((_,ui)=>ux[ui]));
+    units.forEach((u,ui)=>{
+      const bx=ux[ui]-minUx+offsetX;
+      u.ids.forEach((id,i)=>{
+        nodes[id].x=bx+i*(NODE_W+SP_GAP);
+        nodes[id].y=gen[id]*V_GAP+60;
+      });
+    });
+    const maxUx=Math.max(...units.map((u,ui)=>ux[ui]-minUx+unitW(u)));
+    return maxUx;
+  }
+
+  let cursorX=60;
+  subgraphs.forEach(subIds=>{
+    const w=layoutSubgraph(subIds,cursorX);
+    cursorX+=w+GROUP_GAP;
+  });
+
+  Object.keys(nodes).forEach(k=>renderNode(+k));
+  drawLines();renderGenLabels();renderLegend();fitView();saveState();
+}
+
+// ═══════════════════════════════════════════════
+// VIEW TOGGLE (Tree / Timeline)
+// ═══════════════════════════════════════════════
+function showView(v){
+  currentView=v;
+  document.getElementById('btn-tree').classList.toggle('active',v==='tree');
+  document.getElementById('btn-timeline').classList.toggle('active',v==='timeline');
+  wrap.classList.toggle('hidden',v==='timeline');
+  const tlw=document.getElementById('timeline-wrap');
+  tlw.classList.toggle('visible',v==='timeline');
+  if(v==='timeline'){tlZoom=1;tlPanX=0;tlPanY=0;applyTlTransform();renderTimeline()}
+}
+
+function parseYear(s){if(!s||s==='?')return null;const m=s.match(/\d{4}/);return m?parseInt(m[0]):null}
+function calcAge(dates){
+  if(!dates||dates==='?')return null;
+  const parts=dates.split('—').map(s=>s.trim());
+  const birthYear=parseYear(parts[0]);
+  if(!birthYear)return null;
+  const deathYear=parts[1]?parseYear(parts[1]):null;
+  const endYear=deathYear||new Date().getFullYear();
+  const age=endYear-birthYear;
+  if(age<0||age>150)return null;
+  return {age,alive:!deathYear};
+}
+function pluralAge(n){
+  const abs=Math.abs(n)%100;
+  const last=abs%10;
+  if(abs>=11&&abs<=19)return n+' лет';
+  if(last===1)return n+' год';
+  if(last>=2&&last<=4)return n+' года';
+  return n+' лет';
+}
+
+let tlZoom=1,tlPanX=0,tlPanY=0;
+const tlWrap=document.getElementById('timeline-wrap'),tlCanvas=document.getElementById('timeline-canvas');
+function applyTlTransform(){tlCanvas.style.transform=`translate(${tlPanX}px,${tlPanY}px) scale(${tlZoom})`}
+
+tlWrap.addEventListener('wheel',e=>{
+  e.preventDefault();
+  const r=tlWrap.getBoundingClientRect(),mx=e.clientX-r.left,my=e.clientY-r.top;
+  const f=e.deltaY>0?.92:1.08,nz=Math.max(.08,Math.min(4,tlZoom*f)),rt=nz/tlZoom;
+  tlPanX=mx-rt*(mx-tlPanX);tlPanY=my-rt*(my-tlPanY);tlZoom=nz;applyTlTransform();
+},{passive:false});
+(function(){let p=false,sx,sy,spx,spy;
+  tlWrap.addEventListener('mousedown',e=>{if(e.button!==2)return;e.preventDefault();p=true;sx=e.clientX;sy=e.clientY;spx=tlPanX;spy=tlPanY;tlWrap.classList.add('tl-panning')});
+  window.addEventListener('mousemove',e=>{if(!p)return;e.preventDefault();tlPanX=spx+(e.clientX-sx);tlPanY=spy+(e.clientY-sy);applyTlTransform()});
+  window.addEventListener('mouseup',e=>{if(e.button!==2)return;p=false;tlWrap.classList.remove('tl-panning')});
+  tlWrap.addEventListener('contextmenu',e=>e.preventDefault());
+})();
+
+function renderTimeline(){
+  const gen=computeGenerations();
+  const people=Object.values(nodes).map(p=>{
+    const bd=parseYear(p.dates);
+    return{...p,birthYear:bd,gen:gen[p.id]||0};
+  }).filter(p=>p.birthYear);
+
+  if(!people.length){tlCanvas.innerHTML='<div style="text-align:center;padding:60px;color:rgba(255,255,255,.3);font-size:14px">Нет людей с указанным годом рождения для отображения на хронологии.</div>';return}
+
+  const minY=Math.min(...people.map(p=>p.birthYear))-10;
+  const maxY=Math.max(...people.map(p=>p.birthYear))+20;
+  const pxPerYear=24;
+  const totalW=(maxY-minY)*pxPerYear+200;
+  const LEFT_PAD=20;
+
+  const byGen={};people.forEach(p=>{if(!byGen[p.gen])byGen[p.gen]=[];byGen[p.gen].push(p)});
+  const genKeys=Object.keys(byGen).sort((a,b)=>a-b);
+
+  let html=`<div style="position:relative;min-width:${totalW}px">`;
+  html+=`<div class="tl-header" style="min-width:${totalW}px">`;
+  for(let y=Math.ceil(minY/10)*10;y<=maxY;y+=10){
+    const x=LEFT_PAD+(y-minY)*pxPerYear;
+    html+=`<div class="tl-year" style="left:${x}px">${y}</div>`;
+  }
+  html+='</div><div class="tl-body">';
+
+  for(let y=Math.ceil(minY/10)*10;y<=maxY;y+=10){
+    const x=LEFT_PAD+(y-minY)*pxPerYear;
+    html+=`<div class="tl-grid-line" style="left:${x}px"></div>`;
+  }
+
+  genKeys.forEach(g=>{
+    html+=`<div class="tl-gen-sep"><div class="tl-gen-title">Поколение ${toRoman(+g+1)}</div>`;
+    byGen[g].sort((a,b)=>a.birthYear-b.birthYear).forEach(p=>{
+      const x=LEFT_PAD+(p.birthYear-minY)*pxPerYear;
+      const deathYear=parseYear(p.dates&&p.dates.includes('—')?p.dates.split('—')[1]:'')||null;
+      const endYear=deathYear||new Date().getFullYear();
+      const w=Math.max(50,(endYear-p.birthYear)*pxPerYear);
+      const color=getSurnameColor(p.name)||'#555';
+      const label=p.name&&p.name!=='?'?p.name:'?';
+      const ageInfo=calcAge(p.dates);
+      const ageTag=ageInfo?`<span class="tl-bar-age">${ageInfo.alive?ageInfo.age:'† '+ageInfo.age}</span>`:'';
+      html+=`<div class="tl-row"><div class="tl-bar" style="left:${x}px;width:${w}px;background:${color}" onclick="showView('tree');setTimeout(()=>openModal(${p.id}),100)" title="${label} (${p.birthYear}${deathYear?' — '+deathYear:''})">${label}${ageTag}</div></div>`;
+    });
+    html+='</div>';
+  });
+
+  html+='</div></div>';
+  tlCanvas.innerHTML=html;
+}
+
+// ═══════════════════════════════════════════════
+// JSON IMPORT / EXPORT
+// ═══════════════════════════════════════════════
+function exportJSON(){const blob=new Blob([JSON.stringify({nodes:Object.values(nodes),edges,familyColors},null,2)],{type:'application/json'});const a=document.createElement('a');a.href=URL.createObjectURL(blob);a.download='family-tree.json';a.click()}
+function importJSON(){document.getElementById('file-input').click()}
+function loadFile(e){
+  const file=e.target.files[0];if(!file)return;
+  const reader=new FileReader();
+  reader.onload=ev=>{
+    try{
+      const data=JSON.parse(ev.target.result);
+      const nodeList=data.nodes||data.people||[];
+      const edgeList=data.edges||data.links||data.connections||[];
+      if(!nodeList.length){alert('Файл не содержит данных');return}
+      Object.keys(nodes).forEach(k=>{const el=document.getElementById('n'+k);if(el)el.remove()});
+      nodes={};edges=[];seq=1;
+      nodeList.forEach(p=>{
+        p.profession=p.profession||'';
+        p.birthPlace=p.birthPlace||'';
+        p.burialPlace=p.burialPlace||'';
+        p.nationality=p.nationality||'';
+        p.maidenName=p.maidenName||'';
+        p.events=p.events||[];
+        if(p.generation===undefined)p.generation=null;
+        if(p.deceased===undefined)p.deceased=false;
+        p.bio=p.bio||'';
+        p.name=p.name||'';
+        p.dates=p.dates||'';
+        p.gender=p.gender||'u';
+        p.x=p.x||600;
+        p.y=p.y||500;
+        nodes[p.id]=p;
+        if(p.id>=seq)seq=p.id+1;
+        renderNode(p.id);
+      });
+      edges=edgeList.filter(e=>nodes[+e.from]&&nodes[+e.to]);
+      if(data.familyColors)familyColors=data.familyColors;else familyColors={};
+      rebuildSurnameColors();drawLines();renderGenLabels();renderLegend();saveState();fitView();
+    }catch(err){alert('Ошибка загрузки файла: '+err.message);console.error(err)}
+  };
+  reader.readAsText(file);e.target.value='';
+}
+
+// ═══════════════════════════════════════════════
+// FILTERS
+// ═══════════════════════════════════════════════
+function passesFilter(id){
+  if(!activeFilters)return true;
+  const p=nodes[id];if(!p)return false;
+  const gen=computeGenerations();
+  const genOk=!activeFilters.gens||activeFilters.gens.has(gen[id]);
+  const s=normSurname(p.name);
+  const famOk=!activeFilters.families||(s?activeFilters.families.has(s):activeFilters.families.has(''));
+  return genOk&&famOk;
+}
+function toggleFilterPanel(){
+  const panel=document.getElementById('filter-panel');
+  const btn=document.getElementById('btn-filter');
+  if(panel.classList.contains('open')){panel.classList.remove('open');btn.classList.remove('active');return}
+  renderFilterPanel();panel.classList.add('open');btn.classList.add('active');
+}
+function renderFilterPanel(){
+  const panel=document.getElementById('filter-panel');
+  const gen=computeGenerations();
+  const genSet=new Set(Object.values(gen));
+  const genKeys=[...genSet].sort((a,b)=>a-b);
+  const families={};
+  Object.values(nodes).forEach(n=>{
+    const s=normSurname(n.name);
+    const key=s||'';
+    if(!families[key]){
+      const parts=n.name.trim().split(/\s+/);
+      families[key]={display:s?(s.charAt(0).toUpperCase()+s.slice(1)+'ы'):'Без фамилии',color:s?getSurnameColor(n.name):null};
+    }
+  });
+
+  let html='<div class="filter-section"><div class="filter-section-title">Поколение</div>';
+  genKeys.forEach(g=>{
+    const checked=!activeFilters||!activeFilters.gens||activeFilters.gens.has(g);
+    html+=`<label class="filter-row"><input type="checkbox" class="filter-cb" data-type="gen" data-val="${g}" ${checked?'checked':''}> Поколение ${toRoman(g+1)}</label>`;
+  });
+  html+='</div>';
+
+  html+='<div class="filter-section"><div class="filter-section-title">Семья</div>';
+  Object.entries(families).forEach(([key,fam])=>{
+    const checked=!activeFilters||!activeFilters.families||activeFilters.families.has(key);
+    const sw=fam.color?`<span class="filter-swatch" style="background:${fam.color}"></span>`:'';
+    html+=`<label class="filter-row"><input type="checkbox" class="filter-cb" data-type="fam" data-val="${key}" ${checked?'checked':''}> ${sw} ${fam.display}</label>`;
+  });
+  html+='</div>';
+
+  html+='<div class="filter-actions"><button onclick="applyFilters()">Применить</button><button onclick="clearFilters()">Сбросить</button></div>';
+  panel.innerHTML=html;
+}
+function applyFilters(){
+  const checkboxes=document.querySelectorAll('#filter-panel .filter-cb');
+  const gens=new Set(),fams=new Set();
+  let allGens=true,allFams=true;
+  checkboxes.forEach(cb=>{
+    if(cb.dataset.type==='gen'){if(cb.checked)gens.add(+cb.dataset.val);else allGens=false}
+    if(cb.dataset.type==='fam'){if(cb.checked)fams.add(cb.dataset.val);else allFams=false}
+  });
+  if(allGens&&allFams){activeFilters=null}
+  else{activeFilters={gens:allGens?null:gens,families:allFams?null:fams}}
+  Object.keys(nodes).forEach(k=>renderNode(+k));
+  document.getElementById('btn-filter').classList.toggle('active',!!activeFilters);
+}
+function clearFilters(){
+  activeFilters=null;
+  Object.keys(nodes).forEach(k=>renderNode(+k));
+  document.getElementById('btn-filter').classList.remove('active');
+  renderFilterPanel();
+}
+
+// ═══════════════════════════════════════════════
+// KEYBOARD
+// ═══════════════════════════════════════════════
+document.addEventListener('keydown',e=>{
+  if(e.key==='Escape'){
+    if(activeLinePopup){closeLineColorPicker();return}
+    if(document.getElementById('filter-panel').classList.contains('open')){document.getElementById('filter-panel').classList.remove('open');return}
+    if(document.getElementById('lightbox').classList.contains('open'))closeLightbox();
+    else if(document.getElementById('photo-upload-overlay').classList.contains('open'))closePhotoUpload();
+    else if(document.getElementById('sib-overlay').classList.contains('open'))closeSibPicker();
+    else if(document.getElementById('pick-overlay').classList.contains('open'))closePickParent();
+    else if(modalOverlay.classList.contains('open'))closePanel();
+    else if(focused)clearFocus();
+    else if(searchQuery){document.getElementById('search-input').value='';onSearch('')}
+  }
+});
+
+// ═══════════════════════════════════════════════
+// INIT
+// ═══════════════════════════════════════════════
+(async function init(){
+  const loc=window.location;
+  if(new URLSearchParams(loc.search).has('view')||loc.hash==='#view'||loc.href.indexOf('?view')!==-1){
+    viewOnly=true;document.body.classList.add('view-only');
+  }
+  await openIDB();
+  allPhotos=await idbGetAll();
+
+  let remoteLoaded=false;
+  if(!viewOnly){
+    try{
+      const resp=await fetch('data.json');
+      if(resp.ok){
+        const data=await resp.json();
+        const nodeList=data.nodes||data.people||[];
+        if(nodeList.length){
+          viewOnly=true;document.body.classList.add('view-only');
+          nodeList.forEach(p=>{
+            p.profession=p.profession||'';p.birthPlace=p.birthPlace||'';
+            p.burialPlace=p.burialPlace||'';p.nationality=p.nationality||'';
+            p.maidenName=p.maidenName||'';p.events=p.events||[];p.bio=p.bio||'';
+            if(p.generation===undefined)p.generation=null;
+            if(p.deceased===undefined)p.deceased=false;
+            nodes[p.id]=p;if(p.id>=seq)seq=p.id+1;
+          });
+          edges=data.edges||[];
+          if(data.familyColors)familyColors=data.familyColors;
+          remoteLoaded=true;
+        }
+      }
+    }catch(e){}
+  }
+
+  if(!remoteLoaded){
+    const loaded=loadState();
+    if(loaded){
+      Object.keys(nodes).forEach(k=>renderNode(+k));
+    } else {
+      createNode('Вы','','u',6000,4000);
+    }
+  } else {
+    Object.keys(nodes).forEach(k=>renderNode(+k));
+  }
+  rebuildSurnameColors();drawLines();renderGenLabels();renderLegend();
+  setTimeout(fitView,100);
+})();
+</script>
+</body>
+</html>
